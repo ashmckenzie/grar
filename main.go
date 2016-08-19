@@ -2,11 +2,13 @@ package main
 
 import (
   "os"
+  // "encoding/json"
   "fmt"
   "time"
 
   "github.com/andygrunwald/go-jira"
   // "github.com/davecgh/go-spew/spew"
+  //"github.com/jroimartin/gocui"
   "github.com/urfave/cli"
 )
 
@@ -19,19 +21,19 @@ func printIssues(localTZ *time.Location, issues []jira.Issue) {
   for _, issue := range issues {
     t, _ := time.Parse("2006-01-02T15:04:05.000-0700", issue.Fields.Updated)
     fmt.Printf(
+      //"%s %s (https://zendesk.atlassian.net/browse/%s): %+v\n",
       "%s %s: %+v\n",
       t.In(localTZ).Format("2006-01-02T15:04:05-0700"),
       issue.Key,
+      //issue.Key,
       issue.Fields.Summary,
     )
   }
 }
 
-func getTickets(jiraDomain string, jiraUser string, jiraPassword string) {
+func jiraConnect(jiraDomain string, jiraUser string, jiraPassword string) (*jira.Client) {
   jiraClient, err := jira.NewClient(nil, jiraDomain)
-  if err != nil {
-    panic(err)
-  }
+  if err != nil { panic(err) }
 
   res, err := jiraClient.Authentication.AcquireSessionCookie(jiraUser, jiraPassword)
   if err != nil || res == false {
@@ -39,13 +41,10 @@ func getTickets(jiraDomain string, jiraUser string, jiraPassword string) {
     panic(err)
   }
 
-  // issue, _, err := jiraClient.Issue.Get("OP-20977")
-  // if err != nil {
-  //   panic(err)
-  // }
+  return jiraClient
+}
 
-  // fmt.Printf("https://zendesk.atlassian.net/browse/%s - %+v\n", issue.Key, issue.Fields.Summary)
-
+func getTickets(jiraClient *jira.Client) {
   localTZ, _ := time.LoadLocation("Australia/Melbourne")
 
   resolvedTicketsQuery := "assignee = currentUser() AND status in (Resolved, Closed) AND resolutiondate >= startOfWeek() ORDER BY resolutiondate ASC"
@@ -62,10 +61,29 @@ func getTickets(jiraDomain string, jiraUser string, jiraPassword string) {
   printIssues(localTZ, issues)
 }
 
+func wip(jiraClient *jira.Client) {
+  // // opetrushka, amkenzie, dkertesz
+  // issue, _, err := jiraClient.Issue.Get("OP-21266")
+  // if err != nil { panic(err) }
+  // // fmt.Printf("%s: %s (%s)\n", issue.Key, issue.Fields.Summary, issue.Fields.Assignee.Name)
+
+  // for _, element := range issue.Fields.Subtasks {
+  //   payloadStr := `{ "fields": { "assignee": { "name": "opetrushka" } } }`
+  //   var payload map[string]interface{}
+  //   json.Unmarshal([]byte(payloadStr), &payload)
+
+  //   url := fmt.Sprintf("/rest/api/2/issue/%s", element.Key)
+  //   req, _ := jiraClient.NewRequest("PUT", url, payload)
+  //   _, err := jiraClient.Do(req, nil)
+  //   if err != nil { panic(err) }
+  // }
+}
+
 func main() {
   var jiraDomain string
   var jiraUser string
   var jiraPassword string
+  var jiraClient *jira.Client
 
   app := cli.NewApp()
   app.Name = "grar"
@@ -74,32 +92,51 @@ func main() {
 
   app.Flags = []cli.Flag {
     cli.StringFlag{
-      Name: "domain, d",
+      Name: "domain",
       Usage: "domain",
       EnvVar: "JIRA_DOMAIN",
       Destination: &jiraDomain,
     },
     cli.StringFlag{
-      Name: "user, u",
+      Name: "user",
       Usage: "user",
       EnvVar: "JIRA_USER",
       Destination: &jiraUser,
     },
     cli.StringFlag{
-      Name: "password, p",
+      Name: "password",
       Usage: "password",
       EnvVar: "JIRA_PASSWORD",
       Destination: &jiraPassword,
     },
   }
 
-  app.Action = func(c *cli.Context) error {
-    if len(jiraDomain) == 0 { return cli.NewExitError("ERROR: Domain is missing!", 1) }
-    if len(jiraUser) == 0 { return cli.NewExitError("ERROR: User is missing!", 2) }
-    if len(jiraPassword) == 0 { return cli.NewExitError("ERROR: Password is missing!", 3) }
+  app.Commands = []cli.Command{
+    {
+      Name: "report",
 
-    getTickets(jiraDomain, jiraUser, jiraPassword)
-    return nil
+      Action: func(c *cli.Context) error {
+        if len(jiraDomain) == 0 { return cli.NewExitError("ERROR: Domain is missing!", 1) }
+        if len(jiraUser) == 0 { return cli.NewExitError("ERROR: User is missing!", 2) }
+        if len(jiraPassword) == 0 { return cli.NewExitError("ERROR: Password is missing!", 3) }
+
+        jiraClient = jiraConnect(jiraDomain, jiraUser, jiraPassword)
+        getTickets(jiraClient)
+        return nil
+      },
+    },
+    {
+      Name: "wip",
+      Action: func(c *cli.Context) error {
+        if len(jiraDomain) == 0 { return cli.NewExitError("ERROR: Domain is missing!", 1) }
+        if len(jiraUser) == 0 { return cli.NewExitError("ERROR: User is missing!", 2) }
+        if len(jiraPassword) == 0 { return cli.NewExitError("ERROR: Password is missing!", 3) }
+
+        jiraClient = jiraConnect(jiraDomain, jiraUser, jiraPassword)
+        wip(jiraClient)
+        return nil
+      },
+    },
   }
 
   app.Run(os.Args)

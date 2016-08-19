@@ -1,3 +1,6 @@
 .envrc
 bin/*
 grar
+client_secret.json
+weekly_report
+secrets/appsecrets.go
